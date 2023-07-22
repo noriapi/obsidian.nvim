@@ -342,7 +342,7 @@ client._daily = function(self, datetime)
   else
     id = tostring(os.date("%Y-%m-%d", datetime))
   end
-  local alias = tostring(os.date("%B %-d, %Y", datetime))
+  local alias = tostring(os.date("%Y-%m-%d", datetime))
   local path = self:daily_note_path(id)
 
   -- Create Note object and save if it doesn't already exist.
