@@ -27,12 +27,15 @@ source.complete = function(self, request, callback)
     if opts.completion.prepend_note_id then
       new_title = new_id .. "|" .. search
     end
+
+    local link = "[" .. search .. "](" .. new_id .. ".md)"
+
     table.insert(items, {
       sortText = "[[" .. search,
-      label = "Create: [[" .. new_title .. "]]",
+      label = "Create: " .. link,
       kind = 18,
       textEdit = {
-        newText = "[[" .. new_title .. "]]",
+        newText = link,
         range = {
           start = {
             line = request.context.cursor.row - 1,
