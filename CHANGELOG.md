@@ -9,13 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `overwrite_mappings` option, which sets the mappings in the config even if they already exist
+
+## [v1.14.2](https://github.com/epwalsh/obsidian.nvim/releases/tag/v1.14.2) - 2023-09-25
+
+### Fixed
+
+- Updated recommendation for how to configure mappings.
+
+## [v1.14.1](https://github.com/epwalsh/obsidian.nvim/releases/tag/v1.14.1) - 2023-09-22
+
+### Fixed
+
+- Added back missing `util.find()` function.
+
+## [v1.14.0](https://github.com/epwalsh/obsidian.nvim/releases/tag/v1.14.0) - 2023-09-22
+
+### Added
+
+- Added config option `sort_by` to allow setting search result order by "path", "modified", "accessed", or "created".
+- Added config option `sort_reversed` to allow setting search result sort reversed order. The default is `true`.
+- Added an extra option for daily notes to allow changing the default title from "%B %-d, %Y" to other strings.
+- Added a configuration option `daily_notes.template` for automatically using a specific template when creating a new daily note.
+- Adding a configuration option `templates.substitutions` for defining custom template substitutions.
+
+### Changed
+
+- Minor change to the behavior of `:ObsidianNew`. The argument to this command can be in one of 3 different forms which determine the behavior of the command:
+  1. A raw title without any path components, e.g. `:ObsidianNew Foo`. In this case the command will pass the title to the `note_id_func` and put the note in the default location.
+  2. A title prefixed by a path component, e.g. `:ObsidianNew notes/Foo`. In this case the command will pass the title "Foo" to the `note_id_func` and put the note in the directory of the path prefix "notes/".
+  3. An exact path, e.g. `:ObsidianNew notes/foo.md`. In this case the command will put the new note at the path given and the title will be inferred from the filename ("foo").
+
+### Fixed
+
+- A bug when following links when headers have a space.
+- Fixed `ObsidianFollowLink` when the note path contains a block link (e.g. `[[foo#^Bar]]`).
+- Fixed `:ObsidianOpen` doesn't work in WSL2
+  - Use [wsl-open](https://gitlab.com/4U6U57/wsl-open)
+- Improved completion start pattern to trigger anytime `[[` is typed.
+- Fixed issue with parsing inline lists in YAML frontmatter when the items aren't wrapped in quotes.
+
+## [v1.13.0](https://github.com/epwalsh/obsidian.nvim/releases/tag/v1.13.0) - 2023-08-24
+
+### Added
+
 - Added option `prepend_note_id` to allow disabling id generation for new notes.
 - Added `mappings` configuration field.
+- Added `open_notes_in` configuration field
+- Added `backlinks` options to the config. The default is
+  ```lua
+  backlinks = {
+    -- The default height of the backlinks pane.
+    height = 10,
+    -- Whether or not to wrap lines.
+    wrap = true,
+  },
+  ```
 
 ### Changed
 
 - (internal) Refactored daily note creation.
 - obsidian.nvim will now automatically enable the 'gf' passthrough keybinding within your vault unless the 'gf' keybinding has already been overridden by you or another plugin or you override the 'mappings' configuration field.
+
+### Fixed
+
+- Fixed `template_pattern` not escaping special characters.
+- Fixed new notes not getting passed args correctly
+- Fixed `:ObsidianOpen` when note is in a subdirectory with the same name as the root vault directory.
+- Fixed issue where `note_frontmatter_func` option was not used when creating new notes.
 
 ## [v1.12.0](https://github.com/epwalsh/obsidian.nvim/releases/tag/v1.12.0) - 2023-07-15
 

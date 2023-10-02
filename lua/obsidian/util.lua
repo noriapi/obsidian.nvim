@@ -1,7 +1,22 @@
 local scan = require "plenary.scandir"
 local Path = require "plenary.path"
+local echo = require "obsidian.echo"
 
 local util = {}
+
+---Get the strategy for opening notes
+---
+---@param opt "current"|"vsplit"|"hsplit"
+---@return string
+util.get_open_strategy = function(opt)
+  local strategy = "e "
+  if opt == "hsplit" then
+    strategy = "sp "
+  elseif opt == "vsplit" then
+    strategy = "vsp "
+  end
+  return strategy
+end
 
 ---Check if a table (list) contains a value.
 ---
@@ -114,7 +129,34 @@ util.urlencode = function(str)
 end
 
 util.SEARCH_CMD = { "rg", "--no-config", "--fixed-strings", "--type=md" }
-util.FIND_CMD = { "find" }
+util.FIND_CMD = { "rg", "--no-config", "--files", "--type=md" }
+
+---Build the 'rg' command for finding files.
+---
+---@param path string|?
+---@param sort_by string|?
+---@param sort_reversed boolean|?
+---@param term string|?
+---@return string[]
+util.build_find_cmd = function(path, sort_by, sort_reversed, term)
+  local additional_opts = {}
+  if sort_by ~= nil then
+    local sort = "sortr" -- default sort is reverse
+    if sort_reversed == false then
+      sort = "sort"
+    end
+    additional_opts[#additional_opts + 1] = "--" .. sort
+    additional_opts[#additional_opts + 1] = sort_by
+  end
+  if term ~= nil then
+    additional_opts[#additional_opts + 1] = "-g"
+    additional_opts[#additional_opts + 1] = util.quote("*" .. term .. "*.md")
+  end
+  if path ~= nil and path ~= "." then
+    additional_opts[#additional_opts + 1] = tostring(path)
+  end
+  return vim.tbl_flatten { util.FIND_CMD, additional_opts }
+end
 
 ---@class MatchPath
 ---@field text string
@@ -174,22 +216,12 @@ end
 ---
 ---@param dir string|Path
 ---@param term string
+---@param sort_by string|?
+---@param sort_reversed boolean|?
 ---@return function
-util.find = function(dir, term)
+util.find = function(dir, term, sort_by, sort_reversed)
   local norm_dir = vim.fs.normalize(tostring(dir))
-  local cmd_args = vim.tbl_flatten {
-    util.FIND_CMD,
-    {
-      util.quote(norm_dir),
-      "-type",
-      "f",
-      "-not",
-      "-path",
-      util.quote "*/.*",
-      "-iname",
-      util.quote("*" .. term .. "*.md"),
-    },
-  }
+  local cmd_args = util.build_find_cmd(util.quote(norm_dir), sort_by, sort_reversed, term)
   local cmd = table.concat(cmd_args, " ")
 
   local handle = assert(io.popen(cmd, "r"))
@@ -444,18 +476,77 @@ util.get_active_window_cursor_location = function()
   return location
 end
 
+---Substitute Variables inside a given Text
+---
+---@param text string  - name of a template in the configured templates folder
+---@param client obsidian.Client
+---@param title string|nil
+---@return string
+util.substitute_template_variables = function(text, client, title)
+  local methods = client.opts.templates.substitutions or {}
+  if not methods["date"] then
+    methods["date"] = function()
+      local date_format = client.opts.templates.date_format or "%Y-%m-%d"
+      return tostring(os.date(date_format))
+    end
+  end
+  if not methods["time"] then
+    methods["time"] = function()
+      local time_format = client.opts.templates.time_format or "%H:%M"
+      return tostring(os.date(time_format))
+    end
+  end
+  if title then
+    methods["title"] = function()
+      return title
+    end
+  end
+  for key, value in pairs(methods) do
+    text = string.gsub(text, "{{" .. key .. "}}", value())
+  end
+  return text
+end
+
+---Clone Template
+---
+---@param template_name string  - name of a template in the configured templates folder
+---@param note_path string
+---@param client obsidian.Client
+---@param title string
+util.clone_template = function(template_name, note_path, client, title)
+  if client.templates_dir == nil then
+    echo.err("Templates folder is not defined or does not exist", client.opts.log_level)
+    return
+  end
+  local template_path = Path:new(client.templates_dir) / template_name
+  local template_file = io.open(tostring(template_path), "r")
+  local note_file = io.open(tostring(note_path), "wb")
+  if not template_file then
+    return error("Unable to read template at " .. template_path)
+  end
+  if not note_file then
+    return error("Unable to write note at " .. note_path)
+  end
+  for line in template_file:lines "L" do
+    line = util.substitute_template_variables(line, client, title)
+    note_file:write(line)
+  end
+  template_file:close()
+  note_file:close()
+end
+
 ---Insert a template at the given location.
 ---
 ---@param name string - name of a template in the configured templates folder
 ---@param client obsidian.Client
 ---@param location table - a tuple with {bufnr, winnr, row, col}
 util.insert_template = function(name, client, location)
+  if client.templates_dir == nil then
+    echo.err("Templates folder is not defined or does not exist", client.opts.log_level)
+    return
+  end
   local buf, win, row, col = unpack(location)
   local template_path = Path:new(client.templates_dir) / name
-  local date_format = client.opts.templates.date_format or "%Y-%m-%d"
-  local time_format = client.opts.templates.time_format or "%H:%M"
-  local date = tostring(os.date(date_format))
-  local time = tostring(os.date(time_format))
   local title = require("obsidian.note").from_buffer(buf, client.dir):display_name()
 
   local insert_lines = {}
@@ -463,9 +554,7 @@ util.insert_template = function(name, client, location)
   if template_file then
     local lines = template_file:lines()
     for line in lines do
-      line = string.gsub(line, "{{date}}", date)
-      line = string.gsub(line, "{{time}}", time)
-      line = string.gsub(line, "{{title}}", title)
+      line = util.substitute_template_variables(line, client, title)
       table.insert(insert_lines, line)
     end
     template_file:close()
@@ -543,6 +632,18 @@ end
 ---(usually because a plugin is not installed)
 util.implementation_unavailable = function()
   error(IMPLEMENTATION_UNAVAILABLE)
+end
+
+util.escape_magic_characters = function(text)
+  return text:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+end
+
+util.gf_passthrough = function()
+  if require("obsidian").util.cursor_on_markdown_link() then
+    return "<cmd>ObsidianFollowLink<CR>"
+  else
+    return "gf"
+  end
 end
 
 return util

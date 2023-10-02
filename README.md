@@ -21,7 +21,6 @@ Built for people who love the concept of Obsidian -- a simple, markdown-based no
 - 🐞 [Known issues](#known-issues)
 - ➕ [Contributing](#contributing)
 
-
 ## Features
 
 - ▶️ Autocompletion for note references via [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) (triggered by typing `[[`)
@@ -41,7 +40,7 @@ Built for people who love the concept of Obsidian -- a simple, markdown-based no
 - `:ObsidianYesterday` to open (eventually creating) the daily note for the previous working day.
 - `:ObsidianTemplate` to insert a template from the templates folder, selecting from a list using [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) or one of the `fzf` alternatives.
   See ["using templates"](#using-templates) for more information.
-- `:ObsidianSearch` to search for notes in your vault using [ripgrep](https://github.com/BurntSushi/ripgrep) with [fzf.vim](https://github.com/junegunn/fzf.vim), [fzf-lua](https://github.com/ibhagwan/fzf-lua) or [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim). 
+- `:ObsidianSearch` to search for notes in your vault using [ripgrep](https://github.com/BurntSushi/ripgrep) with [fzf.vim](https://github.com/junegunn/fzf.vim), [fzf-lua](https://github.com/ibhagwan/fzf-lua) or [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim).
   This command has one optional argument: a search query to start with.
 - `:ObsidianLink` to link an in-line visual selection of text to a note.
   This command has one optional argument: the ID, path, or alias of the note to link to. If not given, the selected text will be used to find the note with a matching ID, path, or alias.
@@ -58,7 +57,8 @@ Built for people who love the concept of Obsidian -- a simple, markdown-based no
 
 - NeoVim >= 0.8.0 (this plugin uses `vim.fs` which was only added in 0.8).
 - If you want completion and search features (recommended) you'll also need [ripgrep](https://github.com/BurntSushi/ripgrep) to be installed and on your `$PATH`.
-See [ripgrep#installation](https://github.com/BurntSushi/ripgrep) for install options.
+  See [ripgrep#installation](https://github.com/BurntSushi/ripgrep) for install options.
+- If you using WSL, you'll also need [wsl-open](https://gitlab.com/4U6U57/wsl-open)
 
 Search functionality (e.g. via the `:ObsidianSearch` and `:ObsidianQuickSwitch` commands) also requires [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) or one of the `fzf` alternatives (see [plugin dependencies](#plugin-dependencies) below).
 
@@ -73,9 +73,12 @@ Here are some examples using different plugin managers. The full set of [plugin 
 return {
   "epwalsh/obsidian.nvim",
   lazy = true,
-  event = { "BufReadPre path/to/my-vault/**.md" },
-  -- If you want to use the home shortcut '~' here you need to call 'vim.fn.expand':
-  -- event = { "BufReadPre " .. vim.fn.expand "~" .. "/my-vault/**.md" },
+  event = {
+    -- If you want to use the home shortcut '~' here you need to call 'vim.fn.expand'.
+    -- E.g. "BufReadPre " .. vim.fn.expand "~" .. "/my-vault/**.md"
+    "BufReadPre path/to/my-vault/**.md",
+    "BufNewFile path/to/my-vault/**.md",
+  },
   dependencies = {
     -- Required.
     "nvim-lua/plenary.nvim",
@@ -142,8 +145,12 @@ This is a complete list of all of the options that can be passed to `require("ob
   daily_notes = {
     -- Optional, if you keep daily notes in a separate directory.
     folder = "notes/dailies",
-    -- Optional, if you want to change the date format for daily notes.
-    date_format = "%Y-%m-%d"
+    -- Optional, if you want to change the date format for the ID of daily notes.
+    date_format = "%Y-%m-%d",
+    -- Optional, if you want to change the date format of the default alias of daily notes.
+    alias_format = "%B %-d, %Y"
+    -- Optional, if you want to automatically insert a template from your template directory like 'daily.md'
+    template = nil
   },
 
   -- Optional, completion.
@@ -165,8 +172,18 @@ This is a complete list of all of the options that can be passed to `require("ob
   -- Optional, key mappings.
   mappings = {
     -- Overrides the 'gf' mapping to work on markdown/wiki links within your vault.
-    ["gf"] = require("obsidian.mapping").gf_passthrough(),
+    ["gf"] = {
+      action = function()
+        return require("obsidian").util.gf_passthrough()
+      end,
+      opts = { noremap = false, expr = true, buffer = true },
+    },
   },
+
+  -- Optional, if set to true, the specified mappings in the `mappings`
+  -- table will overwrite existing ones. Otherwise a warning is printed
+  -- and the mappings are not applied.
+  overwrite_mappings = false,
 
   -- Optional, customize how names/IDs for new notes are created.
   note_id_func = function(title)
@@ -206,8 +223,18 @@ This is a complete list of all of the options that can be passed to `require("ob
   -- Optional, for templates (see below).
   templates = {
     subdir = "templates",
-    date_format = "%Y-%m-%d-%a",
+    date_format = "%Y-%m-%d",
     time_format = "%H:%M",
+    -- A map for custom variables, the key should be the variable and the value a function
+    substitutions = {}
+  },
+
+  -- Optional, customize the backlinks interface.
+  backlinks = {
+    -- The default height of the backlinks pane.
+    height = 10,
+    -- Whether or not to wrap lines.
+    wrap = true,
   },
 
   -- Optional, by default when you use `:ObsidianFollowLink` on a link to an external
@@ -232,6 +259,17 @@ This is a complete list of all of the options that can be passed to `require("ob
   -- is not installed, or if it the command does not support it, the
   -- remaining finders will be attempted in the original order.
   finder = "telescope.nvim",
+
+  -- Optional, sort search results by "path", "modified", "accessed", or "created".
+  -- The recommend value is "modified" and `true` for `sort_reversed`, which means, for example `:ObsidianQuickSwitch`
+  -- will show the notes sorted by latest modified time
+  sort_by = "modified",
+  sort_reversed = true,
+
+  -- Optional, determines whether to open notes in a horizontal split, a vertical split,
+  -- or replacing the current buffer (default)
+  -- Accepted values are "current", "hsplit" and "vsplit"
+  open_notes_in = "current"
 }
 ```
 
@@ -247,7 +285,7 @@ If you use `vim-markdown` you'll probably want to disable its frontmatter syntax
 
 If you're using [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter/blob/master/README.md) and not [vim-markdown](https://github.com/preservim/vim-markdown), you'll probably want to enable `additional_vim_regex_highlighting` for markdown to benefit from obsidian.nvim's extra syntax improvements:
 
-```lua 
+```lua
 require("nvim-treesitter.configs").setup({
   ensure_installed = { "markdown", "markdown_inline", ... },
   highlight = {
@@ -279,7 +317,7 @@ Then make sure to comment out the `gf` keybinding in your obsidian.nvim config:
 
 ```lua
 mappings = {
-  -- ["gf"] = require("obsidian.mapping").gf_passthrough(),
+  -- ["gf"] = ...
 },
 ```
 
@@ -287,13 +325,18 @@ Or alternatively you could map obsidian.nvim's follow functionality to a differe
 
 ```lua
 mappings = {
-  ["fo"] = require("obsidian.mapping").gf_passthrough(),
+  ["fo"] = {
+    action = function()
+      return require("obsidian").util.gf_passthrough()
+    end,
+    opts = { noremap = false, expr = true, buffer = true },
+  },
 },
 ```
 
 ### Using templates
 
-To insert a template, run the command `:ObsidianTemplate`. This will open [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) or one of the `fzf` alternatives and allow you to select a template from the templates folder. Select a template and hit `<CR>` to insert. Substitution of `{{date}}`, `{{time}}`, and `{{title}}` is supported. 
+To insert a template, run the command `:ObsidianTemplate`. This will open [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) or one of the `fzf` alternatives and allow you to select a template from the templates folder. Select a template and hit `<CR>` to insert. Substitution of `{{date}}`, `{{time}}`, and `{{title}}` is supported.
 
 For example, with the following configuration
 
@@ -304,7 +347,7 @@ For example, with the following configuration
   templates = {
       subdir = "my-templates-folder",
       date_format = "%Y-%m-%d-%a",
-      time_format = "%H:%M"
+      time_format = "%H:%M",
   },
 }
 ```
@@ -313,10 +356,12 @@ and the file `~/my-vault/my-templates-folder/note template.md`:
 
 ```markdown
 # {{title}}
+
 Date created: {{date}}
 ```
 
 creating the note `Configuring Neovim.md` and executing `:ObsidianTemplate` will insert
+
 ```markdown
 # Configuring Neovim
 
@@ -325,7 +370,21 @@ Date created: 2023-03-01-Wed
 
 above the cursor position.
 
-## Known Issues 
+You can also define custom template substitutions with the configuration field `templates.substitutions`. For example, to automatically substitute the template variable `{{yesterday}}` when inserting a template, you could add this to your config:
+
+```lua
+{
+-- other fields ...
+templates = {
+  substitutions = {
+    yesterday = function()
+      return os.date("%Y-%m-%d", os.time() - 86400)
+    end
+  }
+}
+```
+
+## Known Issues
 
 ### Configuring vault directory behind a link
 
